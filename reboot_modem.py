@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import logging
 import os
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
@@ -12,6 +13,8 @@ import requests
 LOGIN_PATH = "/cgi-bin/login.ha"
 RESTART_PATH = "/cgi-bin/restart.ha"
 RESTARTING_PATH = "/cgi-bin/restarting.ha"
+
+logger = logging.getLogger("reboot_modem")
 
 
 class NonceParser(HTMLParser):
@@ -38,8 +41,9 @@ def hash_password(password: str, nonce: str) -> str:
     return hashlib.md5((password + nonce).encode()).hexdigest()
 
 
-def reboot_modem(base_url: str, password: str) -> None:
+def reboot_modem(base_url: str, password: str, verify_ssl: bool = True) -> None:
     session = requests.Session()
+    session.verify = verify_ssl
     # just get the initial SessionID cookie
     resp = session.get(urljoin(base_url, "/"), allow_redirects=True)
     resp.raise_for_status()
@@ -49,7 +53,7 @@ def reboot_modem(base_url: str, password: str) -> None:
     resp.raise_for_status()
 
     nonce = extract_nonce(resp.text)
-    print(f"Login nonce: {nonce[:16]}...")
+    logger.debug(f"Login nonce: {nonce}...")
 
     # POST login credentials
     hashpwd = hash_password(password, nonce)
@@ -65,14 +69,14 @@ def reboot_modem(base_url: str, password: str) -> None:
     if RESTART_PATH not in resp.url:
         raise RuntimeError(f"Login failed or unexpected redirect: {resp.url}")
 
-    print("Login successful.")
+    logger.info("Login successful.")
 
     # Step 3: GET restart confirmation page to grab its nonce
     resp = session.get(urljoin(base_url, RESTART_PATH), allow_redirects=True)
     resp.raise_for_status()
 
     restart_nonce = extract_nonce(resp.text)
-    print(f"Restart nonce: {restart_nonce[:16]}...")
+    logger.debug(f"Restart nonce: {restart_nonce}...")
 
     # Step 4: POST restart
     restart_data = {
@@ -83,7 +87,7 @@ def reboot_modem(base_url: str, password: str) -> None:
     resp.raise_for_status()
 
     if RESTARTING_PATH in resp.url:
-        print("Modem is rebooting.")
+        logger.info("Modem is rebooting.")
     else:
         raise RuntimeError(f"Restart did not trigger — landed on: {resp.url}")
 
@@ -91,15 +95,24 @@ def reboot_modem(base_url: str, password: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Reboot an Arris BGW210-700 modem.")
     parser.add_argument(
-        "--host",
+        "-c", "--host",
         default="192.168.1.254",
         help="Modem hostname or IP",
     )
-    parser.add_argument("--password",
+    parser.add_argument("-p", "--password",
                         help="Modem device password. Required, but can be "
                              "specified with the MODEM_REBOOT_PASSWORD "
                              "environment variable instead.")
+    parser.add_argument("-i", "--insecure", action="store_true",
+                        help="Disable SSL certificate verification.")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Enable verbose output.")
     args = parser.parse_args()
+    logging.basicConfig(
+        format="[%(asctime)s] %(name)s|%(levelname)s: %(message)s",
+        level=logging.DEBUG if args.verbose else logging.INFO
+    )
+    logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
     if not args.password:
         args.password = os.environ.get("MODEM_REBOOT_PASSWORD")
         if not args.password:
@@ -110,4 +123,4 @@ if __name__ == "__main__":
     else:  # if user didn't specify a scheme (like "192.168.1.254"), urlparse will treat it as a path
         base_url = f"http://{url.path}"
 
-    reboot_modem(base_url, args.password)
+    reboot_modem(base_url, args.password, verify_ssl=not args.insecure)
