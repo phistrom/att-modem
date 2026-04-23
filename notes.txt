@@ -1,0 +1,57 @@
+GET
+http://192.168.1.254/
+This sets a cookie for a SessionID. You must do this step first otherwise you will get an
+error about how your browser must accept cookies if you attempt to go straight to
+http://192.168.1.254/cgi-bin/restart.ha
+Alternatively, you can go to http://192.168.1.254/cgi-bin/restart.ha where it will set a SessionID
+cookie, and then when you refresh, you will get the proper page.
+
+GET
+http://192.168.1.254/cgi-bin/restart.ha
+
+It asks for a device code in a text box. There's a hidden input nonce field here. The form posts to /cgi-bin/login.ha
+
+POST
+http://192.168.1.254/cgi-bin/login.ha
+Form Data:
+nonce 00b5d24584d37622648a02b541220e86401366d86f447e500e37ce6d2efe6fb4
+password *********
+hashpassword f9b0623ad746f9aeedce5b94d1391e87
+Continue Continue
+
+nonce is taken from <input type="hidden" name="nonce" value="00b5d24584d37622648a02b541220e86401366d86f447e500e37ce6d2efe6fb4">
+password is literally asterisks; same length of the password (the javascript does this to the value once the form is submitted)
+hashpassword is MD5 of concat(password, nonce)
+Continue is from <input type="submit" name="Continue" onclick="hashpwd()" class="cssbtn btnspacer" value="Continue" />
+
+This will respond with a 302 redirect and the Location header will be: "/cgi-bin/restart.ha"
+I think the way it knows where to redirect comes from the SessionID. If you put in a wrong password,
+you get a 302 redirect to "/cgi-bin/login.ha" instead of staying on "/cgi-bin/restart.ha". However
+when you provide the correct password, even though the Referer header is "/cgi-bin/restart.ha",
+it still redirects to "/cgi-bin/login.ha".
+
+GET
+http://192.168.1.254/cgi-bin/restart.ha
+Contains this form:
+<form method="post" action="/cgi-bin/restart.ha">
+<input type="hidden" name="nonce" value="342537f935800d7d18993388302a8d88b9695329a66842379adaa6b7494711b9">
+<p class="col1"><br>Restarting your (ARRIS BGW210-700) device will temporarily prevent access to the Internet and any associated services (e.g. VoIP)
+currently in use on this device or connected devices which depend on it.<br><br>
+   <input type="submit" name="Restart" class="cssbtn smallbtn btnspacer" value="Restart">
+   <input type="submit" name="Cancel" class="cssbtn smallbtn btnspacer" value="Cancel">
+</p>
+</form>
+
+POST
+http://192.168.1.254/cgi-bin/restart.ha
+The payload is
+nonce 342537f935800d7d18993388302a8d88b9695329a66842379adaa6b7494711b9
+Restart Restart
+
+If you did it right, this should return a 302 redirect to http://192.168.1.254/cgi-bin/restarting.ha
+otherwise you get 302 redirect back to http://192.168.1.254/cgi-bin/restart.ha
+
+
+GET
+http://192.168.1.254/cgi-bin/restarting.ha
+This is just a page with a ticking clock; but it tells us we were successful.
