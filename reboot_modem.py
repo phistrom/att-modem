@@ -71,14 +71,14 @@ def reboot_modem(base_url: str, password: str, verify_ssl: bool = True) -> None:
 
     logger.info("Login successful.")
 
-    # Step 3: GET restart confirmation page to grab its nonce
+    # GET restart confirmation page to grab its nonce
     resp = session.get(urljoin(base_url, RESTART_PATH), allow_redirects=True)
     resp.raise_for_status()
 
     restart_nonce = extract_nonce(resp.text)
     logger.debug(f"Restart nonce: {restart_nonce}...")
 
-    # Step 4: POST restart
+    # POST restart
     restart_data = {
         "nonce": restart_nonce,
         "Restart": "Restart",
